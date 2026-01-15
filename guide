@@ -1,4 +1,10 @@
-to login user
+
+
+
+-------------------------------------------------------------
+to login user ( model > controller > route > server )
+--------------------------------------------------------------
+
 1. go to user.model.ts
        import { pool } from '../config/db';
 
@@ -63,5 +69,138 @@ to login user
 
 
 
+-------------------------------------------------------------
+to create user crud function ( model > controller > route > server )
+--------------------------------------------------------------
 
 
+1. go to user.model.ts
+
+        export interface CreateUserPayload {
+            name: string;
+            age: number;
+            address: string;
+            username: string;
+            password: string;
+        }
+
+        export const createUser = async (user: CreateUserPayload): Promise<User> => {
+            const res = await pool.query(
+                'INSERT INTO users (name, age, address, username, password) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, age, address, username',
+                [user.name, user.age, user.address, user.username, user.password]
+            );
+            return mapRowToUser(res.rows[0]);
+        };
+
+2. create user.controller.ts logic
+
+        export const createUser = async (req: Request, res: Response) => {
+            const { name, age, address, username, password } = req.body;
+            const numericAge = parseAge(age);
+
+            if (!name || !address || !username || !password || numericAge === null) {
+                return res.status(400).json({ message: 'Name, age, address, username, and password are required.' });
+            }
+
+            try {
+                const user = await UserModel.createUser({
+                    name: name.trim(),
+                    age: numericAge,
+                    address: address.trim(),
+                    username: username.trim(),
+                    password,
+                });
+                res.status(201).json(user);
+            } catch (error: any) {
+                if (error?.code === '23505') {
+                    return res.status(409).json({ message: 'Username already exists.' });
+                }
+                res.status(500).json({ message: 'Unable to create user.' });
+            }
+        };
+
+3. create user.routes.ts entry
+
+        import { getUsers, createUser, deleteUser, updateUser } from "../controllers/user.controller";
+
+        router.post("/users", createUser);
+
+4. go to server.ts
+
+        import userRoutes from "./routes/user.routes";
+
+        app.use("/api", userRoutes);
+
+5. other CRUD helpers
+
+   READ (list users)
+
+        // user.model.ts
+        export const getAllUsers = async (): Promise<User[]> => {
+            const res = await pool.query('SELECT id, name, age, address, username FROM users ORDER BY id ASC');
+            return res.rows.map(mapRowToUser);
+        };
+
+        // user.controller.ts
+        export const getUsers = async (_req: Request, res: Response) => {
+            const users = await UserModel.getAllUsers();
+            res.json(users);
+        };
+
+        // user.routes.ts
+        router.get("/users", getUsers);
+
+   UPDATE (edit existing user)
+
+        // user.model.ts
+        export const updateUser = async (id: number, user: UpdateUserPayload): Promise<User> => {
+            const values: (string | number)[] = [user.name, user.age, user.address, user.username];
+            let setClause = 'name=$1, age=$2, address=$3, username=$4';
+            if (user.password) {
+                values.push(user.password);
+                setClause += `, password=$${values.length}`;
+            }
+            values.push(id);
+            const res = await pool.query(
+                `UPDATE users SET ${setClause} WHERE id=$${values.length} RETURNING id, name, age, address, username`,
+                values
+            );
+            return mapRowToUser(res.rows[0]);
+        };
+
+        // user.controller.ts
+        export const updateUser = async (req: Request, res: Response) => {
+            const id = Number(req.params.id);
+            const { name, age, address, username, password } = req.body;
+            const numericAge = parseAge(age);
+            if (!name || !address || !username || numericAge === null) {
+                return res.status(400).json({ message: 'Name, age, address, and username are required.' });
+            }
+            const user = await UserModel.updateUser(id, {
+                name: name.trim(),
+                age: numericAge,
+                address: address.trim(),
+                username: username.trim(),
+                password,
+            });
+            res.json(user);
+        };
+
+        // user.routes.ts
+        router.put("/users/:id", updateUser);
+
+   DELETE (remove user)
+
+        // user.model.ts
+        export const deleteUser = async (id: number): Promise<void> => {
+            await pool.query('DELETE FROM users WHERE id=$1', [id]);
+        };
+
+        // user.controller.ts
+        export const deleteUser = async (req: Request, res: Response) => {
+            await UserModel.deleteUser(Number(req.params.id));
+            res.json({ message: 'Deleted successfully' });
+        };
+
+        // user.routes.ts
+        router.delete("/users/:id", deleteUser);
