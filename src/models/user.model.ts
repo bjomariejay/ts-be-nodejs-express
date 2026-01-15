@@ -5,6 +5,8 @@ export interface User {
     name: string;
     age: number;
     address: string;
+    username?: string;
+    password?: string;
 }
 
 export const getAllUsers = async (): Promise<User[]> => {
@@ -30,4 +32,9 @@ export const updateUser = async (id: number, user: User): Promise<User> => {
 
 export const deleteUser = async (id: number): Promise<void> => {
     await pool.query('DELETE FROM users WHERE id=$1', [id]);
+};
+
+export const findByCredentials = async (username: string, password: string): Promise<User | null> => {
+    const res = await pool.query('SELECT id, name, age, address, username FROM users WHERE username=$1 AND password=$2 LIMIT 1', [username, password]);
+    return res.rows[0] ?? null;
 };

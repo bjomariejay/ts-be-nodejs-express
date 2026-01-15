@@ -1,0 +1,67 @@
+to login user
+1. go to user.model.ts
+       import { pool } from '../config/db';
+
+       export interface User {
+           id?: number;
+           name: string;
+           age: number;
+           address: string;
+           username?: string;
+           password?: string;
+       }
+
+       export const findByCredentials = async (username: string, password: string): Promise<User | null> => {
+           const res = await pool.query('SELECT id, name, age, address, username FROM users WHERE username=$1 AND password=$2 LIMIT 1', [username, password]);
+           return res.rows[0] ?? null;
+       };
+
+ 2. create auth.controller.ts
+
+       import { Request, Response } from "express";
+       import * as UserModel from "../models/user.model";
+
+       export const login = async (req: Request, res: Response) => {
+           const { username, password } = req.body;
+
+           if (!username || !password) {
+               return res.status(400).json({ success: false, message: "Username and password are required" });
+           }
+
+           try {
+               const user = await UserModel.findByCredentials(username, password);
+               if (!user) {
+                   return res.status(401).json({ success: false, message: "Invalid username or password" });
+               }
+
+               return res.json({
+                   success: true,
+                   user
+               });
+           } catch (error) {
+               console.error("Login error", error);
+               res.status(500).json({ success: false, message: "Server error" });
+           }
+       };
+
+3. create auth.route.ts
+
+    import { Router } from "express";
+    import { login } from "../controllers/auth.controller";
+
+    const router = Router();
+
+    router.post("/login", login);
+
+    export default router;
+
+4. go to server.ts
+
+        import authRoutes from "./routes/auth.routes"
+
+        app.use("/api", authRoutes);
+
+
+
+
+

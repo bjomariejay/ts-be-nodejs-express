@@ -2,5 +2,12 @@ CREATE TABLE users (
                        id SERIAL PRIMARY KEY,
                        name VARCHAR(255),
                        age INT,
-                       address TEXT
+                       address TEXT,
+                       username VARCHAR(255),
+                       password VARCHAR(255)
 );
+
+
+ALTER TABLE users
+    ADD COLUMN username VARCHAR(255) NOT NULL DEFAULT 'unknown',
+    ADD COLUMN password VARCHAR(255) NOT NULL DEFAULT 'changeme';
