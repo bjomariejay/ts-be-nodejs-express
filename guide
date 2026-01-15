@@ -204,3 +204,74 @@ to create user crud function ( model > controller > route > server )
 
         // user.routes.ts
         router.delete("/users/:id", deleteUser);
+
+-------------------------------------------------------------
+Secure password hashing with bcrypt
+-------------------------------------------------------------
+
+1. install dependencies
+
+        npm install bcrypt @types/bcrypt
+
+2. create a helper `src/utils/password.ts`
+
+        import bcrypt from "bcrypt";
+
+        const DEFAULT_ROUNDS = 10;
+        const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? DEFAULT_ROUNDS);
+
+        export const hashPassword = (password: string) => bcrypt.hash(password, saltRounds);
+
+        export const comparePassword = (password: string, hash: string) => bcrypt.compare(password, hash);
+
+3. update the user model `src/models/user.model.ts`
+
+        export interface CreateUserPayload { ... passwordHash: string }
+        export interface UpdateUserPayload { ... passwordHash?: string }
+        export interface UserWithPassword extends User { passwordHash: string }
+
+        export const createUser = async (user: CreateUserPayload) => {
+            await pool.query('INSERT ... password)', [..., user.passwordHash]);
+        };
+
+        export const updateUser = async (id: number, user: UpdateUserPayload) => {
+            if (user.passwordHash) { setClause += ', password=$X'; }
+        };
+
+        export const findByUsername = async (username: string) => {
+            const res = await pool.query('SELECT ..., password FROM users WHERE username=$1 LIMIT 1', [username]);
+            return row ? { ...userFields, passwordHash: row.password } : null;
+        };
+
+4. hash before writing `src/controllers/user.controller.ts`
+
+        import { hashPassword } from "../utils/password";
+
+        const passwordHash = await hashPassword(password);
+        await UserModel.createUser({ ..., passwordHash });
+
+        const passwordHash = password ? await hashPassword(password) : undefined;
+        await UserModel.updateUser(id, { ..., passwordHash });
+
+5. verify on login `src/controllers/auth.controller.ts`
+
+        import { comparePassword, hashPassword } from "../utils/password";
+
+        const account = await UserModel.findByUsername(username.trim());
+        const passwordMatches = await comparePassword(password, account.passwordHash);
+        if (!passwordMatches) return res.status(401) ...;
+
+        const { passwordHash, ...user } = account;
+        return res.json({ success: true, user });
+
+        // signup also hashes before persisting
+        const passwordHash = await hashPassword(String(password));
+        await UserModel.createUser({ ..., passwordHash });
+
+6. optional config
+
+        # .env
+        BCRYPT_SALT_ROUNDS=10
+
+        // src/utils/password.ts already reads the env value; adjust as needed.
+

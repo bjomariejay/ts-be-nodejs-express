@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as UserModel from "../models/user.model";
+import { comparePassword, hashPassword } from "../utils/password";
 
 export const login = async (req: Request, res: Response) => {
     const { username, password } = req.body;
@@ -9,10 +10,17 @@ export const login = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await UserModel.findByCredentials(username, password);
-        if (!user) {
+        const account = await UserModel.findByUsername(username.trim());
+        if (!account) {
             return res.status(401).json({ success: false, message: "Invalid username or password" });
         }
+
+        const passwordMatches = await comparePassword(password, account.passwordHash);
+        if (!passwordMatches) {
+            return res.status(401).json({ success: false, message: "Invalid username or password" });
+        }
+
+        const { passwordHash, ...user } = account;
 
         return res.json({
             success: true,
@@ -33,12 +41,13 @@ export const signup = async (req: Request, res: Response) => {
     }
 
     try {
+        const passwordHash = await hashPassword(String(password));
         const user = await UserModel.createUser({
             name: String(name).trim(),
             age: parsedAge,
             address: String(address).trim(),
             username: String(username).trim(),
-            password: String(password)
+            passwordHash
         });
 
         return res.status(201).json({ success: true, user });

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as UserModel from '../models/user.model';
+import { hashPassword } from "../utils/password";
 
 const parseAge = (value: unknown): number | null => {
     const parsedAge = Number(value);
@@ -25,12 +26,13 @@ export const createUser = async (req: Request, res: Response) => {
     }
 
     try {
+        const passwordHash = await hashPassword(password);
         const user = await UserModel.createUser({
             name: name.trim(),
             age: numericAge,
             address: address.trim(),
             username: username.trim(),
-            password,
+            passwordHash,
         });
         res.status(201).json(user);
     } catch (error: any) {
@@ -62,12 +64,13 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     try {
+        const passwordHash = password ? await hashPassword(password) : undefined;
         const user = await UserModel.updateUser(id, {
             name: name.trim(),
             age: numericAge,
             address: address.trim(),
             username: username.trim(),
-            password,
+            passwordHash,
         });
         res.json(user);
     } catch (error: any) {
