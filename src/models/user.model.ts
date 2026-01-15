@@ -6,6 +6,7 @@ export interface User {
     age: number;
     address: string;
     username: string;
+    passwordHash?: string;
 }
 
 export interface CreateUserPayload {
@@ -34,15 +35,16 @@ const mapRowToUser = (row: any): User => ({
     age: row.age,
     address: row.address,
     username: row.username,
+    passwordHash: row.passwordhash ?? row.password ?? undefined,
 });
 
 const mapRowToUserWithPassword = (row: any): UserWithPassword => ({
     ...mapRowToUser(row),
-    passwordHash: row.password,
+    passwordHash: row.passwordhash ?? row.password,
 });
 
 export const getAllUsers = async (): Promise<User[]> => {
-    const res = await pool.query('SELECT id, name, age, address, username FROM users ORDER BY id ASC');
+    const res = await pool.query('SELECT id, name, age, address, username, password as "passwordHash" FROM users ORDER BY id ASC');
     return res.rows.map(mapRowToUser);
 };
 
@@ -77,7 +79,7 @@ export const deleteUser = async (id: number): Promise<void> => {
 };
 
 export const findByUsername = async (username: string): Promise<UserWithPassword | null> => {
-    const res = await pool.query('SELECT id, name, age, address, username, password FROM users WHERE username=$1 LIMIT 1', [username]);
+    const res = await pool.query('SELECT id, name, age, address, username, password as "passwordHash" FROM users WHERE username=$1 LIMIT 1', [username]);
     const row = res.rows[0];
     return row ? mapRowToUserWithPassword(row) : null;
 };
