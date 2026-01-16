@@ -205,6 +205,98 @@ to create user crud function ( model > controller > route > server )
         // user.routes.ts
         router.delete("/users/:id", deleteUser);
 
+
+-------------------------------------------------------------
+Protected routes + API tokens with JWT  (what changed)
+-------------------------------------------------------------
+
+The API now uses JWT bearer tokens so only authenticated users can hit the CRUD endpoints:
+
+0. New dependencies
+       - Backend: `jsonwebtoken` + `@types/jsonwebtoken`
+       - Frontend: `react-router-dom` + `@types/react-router-dom` (for route protection and redirects)
+
+1. Token utilities (`src/utils/token.ts`)
+       - We sign a short payload `{ userId, username }` with `jsonwebtoken`.
+       - `JWT_SECRET` + `JWT_EXPIRES_IN` come from `.env` (fallback secret = "change-me" but you should override it).
+        ```ts
+        import jwt, { JwtPayload, Secret } from "jsonwebtoken";
+
+        const JWT_SECRET: Secret = process.env.JWT_SECRET ?? "change-me";
+
+        export const generateAuthToken = (payload: AuthTokenPayload) =>
+            jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+
+        export const verifyAuthToken = (token: string) =>
+            jwt.verify(token, JWT_SECRET) as AuthTokenPayload & JwtPayload;
+        ```
+
+2. Auth controller updates (`src/controllers/auth.controller.ts`)
+       - `/login` and `/signup` both respond with `{ success, user, token }`.
+       - Signup/login console.log the issued token for easy debugging.
+       - Added `/me` handler so the frontend can validate an existing token.
+        ```ts
+        const token = generateAuthToken({ userId: account.id, username: account.username });
+        return res.json({ success: true, token, user: buildUserResponse(account) });
+
+        export const getCurrentUser = async (req: AuthenticatedRequest, res: Response) => {
+            if (!req.authUser) return res.status(401).json({ success: false, message: "Not authenticated" });
+            const account = await UserModel.findById(req.authUser.userId);
+            return account ? res.json({ success: true, user: buildUserResponse(account) }) :
+                res.status(404).json({ success: false, message: "User not found" });
+        };
+        ```
+
+3. Auth middleware (`src/middleware/auth.middleware.ts`)
+       - Looks for `Authorization: Bearer <token>`.
+       - Verifies token and attaches `req.authUser`.
+       - Rejects missing/invalid tokens with HTTP 401 + `"Authorization token missing"` message.
+        ```ts
+        export const authenticate = (req, res, next) => {
+            const header = req.headers.authorization;
+            if (!header?.startsWith("Bearer ")) {
+                return res.status(401).json({ success: false, message: "Authorization token missing" });
+            }
+            try {
+                const payload = verifyAuthToken(header.split(" ")[1]);
+                req.authUser = { userId: payload.userId, username: payload.username };
+                next();
+            } catch (error) {
+                return res.status(401).json({ success: false, message: "Invalid or expired token" });
+            }
+        };
+        ```
+
+4. User routes are now protected (`src/routes/user.routes.ts`)
+       - `router.use(authenticate);` wraps every `/users` endpoint.
+       - Only `/api/login`, `/api/signup`, `/api/me` remain public (see `src/routes/auth.routes.ts`).
+       - In `src/server.ts` we mount `authRoutes` *before* `userRoutes` so signup/login are evaluated before the auth middleware.
+        ```ts
+        const router = Router();
+        router.use(authenticate);
+        router.get("/users", getUsers);
+        router.post("/users", createUser);
+        router.delete("/users/:id", deleteUser);
+        router.put("/users/:id", updateUser);
+        ```
+
+5. Extra model helper (`src/models/user.model.ts`)
+       - `findById` is used by `/api/me` to send back the authenticated user record.
+
+Calling the API now looks like this:
+
+    # public signup/login (no token required)
+    POST /api/signup { name, age, address, username, password }
+    => response includes token -> save it client-side
+
+    # authenticated requests
+    GET /api/users
+    Authorization: Bearer <token>
+
+If you hit `/api/users` without the header you'll see `401 Authorization token missing` by design.
+
+On the frontend the shared Axios client (`ts-fe-react/src/api/httpClient.ts`) automatically reads `auth_token` from `localStorage`, injects the header, and signs the user out if a 401 comes back. The Sign Up page also logs the token to the browser console so you can copy it during manual testing.
+
 -------------------------------------------------------------
 Secure password hashing with bcrypt
 -------------------------------------------------------------

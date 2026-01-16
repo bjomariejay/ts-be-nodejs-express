@@ -84,3 +84,9 @@ export const findByUsername = async (username: string): Promise<UserWithPassword
     const row = res.rows[0];
     return row ? mapRowToUserWithPassword(row) : null;
 };
+
+export const findById = async (id: number): Promise<User | null> => {
+    const res = await pool.query('SELECT id, name, age, address, username, password as "passwordHash" FROM users WHERE id=$1 LIMIT 1', [id]);
+    const row = res.rows[0];
+    return row ? mapRowToUser(row) : null;
+};
