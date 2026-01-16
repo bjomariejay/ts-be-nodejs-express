@@ -35,12 +35,13 @@ const mapRowToUser = (row: any): User => ({
     age: row.age,
     address: row.address,
     username: row.username,
-    passwordHash: row.passwordhash ?? row.password ?? undefined,
+    // handle snake_case + camelCase aliases from Postgres
+    passwordHash: row.passwordHash ?? row.passwordhash ?? row.password ?? undefined,
 });
 
 const mapRowToUserWithPassword = (row: any): UserWithPassword => ({
     ...mapRowToUser(row),
-    passwordHash: row.passwordhash ?? row.password,
+    passwordHash: row.passwordHash ?? row.passwordhash ?? row.password,
 });
 
 export const getAllUsers = async (): Promise<User[]> => {
